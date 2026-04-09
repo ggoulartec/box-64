@@ -1,7 +1,13 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require('socket.io');
-const cors = require('cors'); // Corrigido: import adicionado
+const {Server} = require('socket.io');
+const cors = require('cors');
+const {createClient} = require('@supabase/supabase-js');
+
+// Configuração do Supabase (Essas chaves ficarão seguras no painel do Render)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Inicialização do App
 const app = express();
@@ -9,31 +15,24 @@ app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-
-// Configuração do WebSocket
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const io = new Server(server, {cors: {origin: "*", methods: ["GET", "POST"]}});
 
 // 🛠️ 1. Tabela de Incrementos (Em Centavos para evitar erros de ponto flutuante)
 const tabelaIncrementos = [
-    { piso: 10000000, incremento: 100000 },
-    { piso: 5000000, incremento: 50000 },
-    { piso: 2000000, incremento: 30000 },
-    { piso: 1000000, incremento: 20000 },
-    { piso: 500000, incremento: 10000 },
-    { piso: 100000, incremento: 2000 },
-    { piso: 50000, incremento: 1000 },
-    { piso: 20000, incremento: 500 },
-    { piso: 5000, incremento: 300 },
-    { piso: 2000, incremento: 200 },
-    { piso: 1000, incremento: 100 },
-    { piso: 500, incremento: 50 },
-    { piso: 100, incremento: 30 },
-    { piso: 0, incremento: 10 }
+    {piso: 10000000, incremento: 100000},
+    {piso: 5000000, incremento: 50000},
+    {piso: 2000000, incremento: 30000},
+    {piso: 1000000, incremento: 20000},
+    {piso: 500000, incremento: 10000},
+    {piso: 100000, incremento: 2000},
+    {piso: 50000, incremento: 1000},
+    {piso: 20000, incremento: 500},
+    {piso: 5000, incremento: 300},
+    {piso: 2000, incremento: 200},
+    {piso: 1000, incremento: 100},
+    {piso: 500, incremento: 50},
+    {piso: 100, incremento: 30},
+    {piso: 0, incremento: 10}
 ];
 
 function calcularProximoLanceMinimo(lanceAtual) {
@@ -60,7 +59,7 @@ io.on('connection', (socket) => {
         console.log(`Usuário ${socket.id} entrou no leilão ${leilaoId}`);
 
         // Manda o estado atual para quem acabou de entrar
-        if(leiloesAtivos[leilaoId]) {
+        if (leiloesAtivos[leilaoId]) {
             socket.emit('estado_inicial', leiloesAtivos[leilaoId]);
         }
     });
@@ -70,25 +69,25 @@ io.on('connection', (socket) => {
         const leilao = leiloesAtivos[dadosLance.leilaoId];
 
         // Validação 1: O leilão existe?
-        if (!leilao) return socket.emit('erro_lance', { msg: 'Leilão não encontrado.' });
+        if (!leilao) return socket.emit('erro_lance', {msg: 'Leilão não encontrado.'});
 
         const agora = Date.now();
         const tempoRestanteMs = leilao.dataFim - agora;
 
         // Validação 2: Leilão já acabou?
         if (tempoRestanteMs <= 0) {
-            return socket.emit('erro_lance', { msg: 'Este leilão já foi encerrado.' });
+            return socket.emit('erro_lance', {msg: 'Este leilão já foi encerrado.'});
         }
 
         // Validação 3: 🛑 ZONA MORTA (15 segundos)
         if (tempoRestanteMs <= 15000) {
-            return socket.emit('erro_lance', { msg: 'Zona Morta: Não é possível dar lances nos últimos 15 segundos!' });
+            return socket.emit('erro_lance', {msg: 'Zona Morta: Não é possível dar lances nos últimos 15 segundos!'});
         }
 
         // Validação 4: 💰 Cálculo do Incremento
         const lanceMinimo = calcularProximoLanceMinimo(leilao.lanceAtual);
         if (dadosLance.valor < lanceMinimo) {
-            return socket.emit('erro_lance', { msg: `Lance muito baixo. O valor mínimo é R$ ${(lanceMinimo/100).toFixed(2)}` });
+            return socket.emit('erro_lance', {msg: `Lance muito baixo. O valor mínimo é R$ ${(lanceMinimo / 100).toFixed(2)}`});
         }
 
         // ✅ Se passou por tudo, o lance é válido!
@@ -104,15 +103,29 @@ io.on('connection', (socket) => {
             tempoEstendido = true;
         }
 
+        const {data, error} = await supabase
+            .from('lances')
+            .insert([
+                {
+                    leilao_id: dadosLance.leilaoId,
+                    usuario_id: dadosLance.usuarioId,
+                    valor: dadosLance.valor
+                }
+            ]);
+
+        if (error) {
+            // Se o banco falhar, revertemos o lance e avisamos o usuário
+            console.error("Erro ao salvar lance:", error);
+            return socket.emit('erro_lance', {msg: 'Erro ao registrar no banco. Tente novamente.'});
+        }
+
         // Dispara o sucesso para TODOS na sala
         io.to(dadosLance.leilaoId).emit('novo_lance_aceito', {
             valor: dadosLance.valor,
             usuario: dadosLance.isAnonimo ? 'Licitante Anônimo' : dadosLance.apelido,
             novoDataFim: leilao.dataFim,
-            tempoEstendido: tempoEstendido // O frontend pode usar isso para piscar a tela
+            tempoEstendido: tempoEstendido
         });
-
-        // TODO: Aqui chamaremos o Supabase para persistir esse lance no banco de dados
     });
 
     socket.on('disconnect', () => {
@@ -121,6 +134,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-    console.log(`Servidor de leilões rodando na porta ${PORT} 🏎️💨`);
-});
+server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT} 🏎️💨`));
