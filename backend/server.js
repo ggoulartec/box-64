@@ -2,12 +2,11 @@ const express = require("express");
 const http = require("http");
 const {Server} = require('socket.io');
 const cors = require('cors');
-const {createClient} = require('@supabase/supabase-js');
 
-// Configuração do Supabase (Essas chaves ficarão seguras no painel do Render)
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// const {createClient} = require('@supabase/supabase-js');
+// const supabaseUrl = process.env.SUPABASE_URL;
+// const supabaseKey = process.env.SUPABASE_ANON_KEY;
+// const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Inicialização do App
 const app = express();
@@ -46,7 +45,7 @@ const leiloesAtivos = {
     "leilao_datsun_123": {
         lanceAtual: 4000, // R$ 40,00
         // Simulando um leilão que acaba daqui a 45 segundos
-        dataFim: new Date(Date.now() + 45000).getTime()
+        dataFim: new Date(Date.now() + 600000).getTime()
     }
 };
 
@@ -103,21 +102,21 @@ io.on('connection', (socket) => {
             tempoEstendido = true;
         }
 
-        const {data, error} = await supabase
-            .from('lances')
-            .insert([
-                {
-                    leilao_id: dadosLance.leilaoId,
-                    usuario_id: dadosLance.usuarioId,
-                    valor: dadosLance.valor
-                }
-            ]);
-
-        if (error) {
-            // Se o banco falhar, revertemos o lance e avisamos o usuário
-            console.error("Erro ao salvar lance:", error);
-            return socket.emit('erro_lance', {msg: 'Erro ao registrar no banco. Tente novamente.'});
-        }
+        // const {data, error} = await supabase
+        //     .from('lances')
+        //     .insert([
+        //         {
+        //             leilao_id: dadosLance.leilaoId,
+        //             usuario_id: dadosLance.usuarioId,
+        //             valor: dadosLance.valor
+        //         }
+        //     ]);
+        //
+        // if (error) {
+        //     // Se o banco falhar, revertemos o lance e avisamos o usuário
+        //     console.error("Erro ao salvar lance:", error);
+        //     return socket.emit('erro_lance', {msg: 'Erro ao registrar no banco. Tente novamente.'});
+        // }
 
         // Dispara o sucesso para TODOS na sala
         io.to(dadosLance.leilaoId).emit('novo_lance_aceito', {
