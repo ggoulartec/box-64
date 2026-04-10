@@ -1,13 +1,17 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
+import {useRouter} from 'next/navigation';
+import {supabase} from '../../../lib/supabaseClient';
 import Link from "next/link";
 
 export default function NovoLeilaoAdmin() {
+    const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [mensagem, setMensagem] = useState('');
+    const [autorizado, setAutorizado] = useState(false);
+    const [userId, setUserId] = useState(null);
 
-    // Estado para guardar tudo que for digitado
     const [form, setForm] = useState({
         titulo: '',
         descricao: '',
@@ -16,11 +20,39 @@ export default function NovoLeilaoAdmin() {
         ano: 2024,
         is_th: false,
         is_sth: false,
-        preco_inicial: 50, // Em Reais (o backend converte pra centavos)
+        preco_inicial: 50,
         duracao_minutos: 60,
         is_anonimo: false,
-        foto_url: '' // Simplificação para o teste inicial
+        foto_url: ''
     });
+
+    useEffect(() => {
+        const verificarPermissao = async () => {
+            const {data: {session}} = await supabase.auth.getSession();
+
+            if (!session) {
+                router.replace('/login');
+                return;
+            }
+
+            // Se estiver logado, verifica se é Vendedor
+            const {data: perfil} = await supabase
+                .from('perfis')
+                .select('tipo_usuario')
+                .eq('id', session.user.id)
+                .single();
+
+            if (perfil?.tipo_usuario !== 'vendedor') {
+                alert('Acesso negado. Apenas vendedores podem acessar a garagem de criação.');
+                router.replace('/');
+            } else {
+                setUserId(session.user.id);
+                setAutorizado(true);
+            }
+        };
+
+        verificarPermissao();
+    }, [router]);
 
     const handleChange = (e) => {
         const {name, value, type, checked} = e.target;
@@ -32,14 +64,13 @@ export default function NovoLeilaoAdmin() {
         setLoading(true);
         setMensagem('');
 
-        // Preparando os dados (calculando datas e centavos)
         const agora = new Date();
         const dataFim = new Date(agora.getTime() + form.duracao_minutos * 60000);
 
         const payload = {
             ...form,
-            vendedor_id: "seu_id_temporario_123", // Será trocado quando tivermos Login
-            preco_inicial: form.preco_inicial * 100, // Converte R$ 50 para 5000 centavos
+            vendedor_id: userId,
+            preco_inicial: form.preco_inicial * 100,
             data_inicio: agora.toISOString(),
             data_fim: dataFim.toISOString(),
             fotos: [form.foto_url]
@@ -54,7 +85,6 @@ export default function NovoLeilaoAdmin() {
 
             if (resposta.ok) {
                 setMensagem('✅ Leilão criado e pronto para a pista!');
-                // Aqui poderíamos limpar o formulário ou redirecionar
             } else {
                 setMensagem('❌ Erro ao criar o leilão.');
             }
@@ -65,10 +95,17 @@ export default function NovoLeilaoAdmin() {
         setLoading(false);
     };
 
+    if (!autorizado) {
+        return <div
+            className="min-h-screen bg-[#121212] flex items-center justify-center text-white font-bold">Verificando
+            credenciais de acesso...</div>;
+    }
+
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 font-sans">
             <div className="absolute top-8 left-8">
-                <Link href="/" className="text-gray-400 hover:text-orange-500 font-bold flex items-center gap-2 transition-colors">
+                <Link href="/"
+                      className="text-gray-400 hover:text-orange-500 font-bold flex items-center gap-2 transition-colors">
                     <span>←</span> Voltar para a Vitrine
                 </Link>
             </div>

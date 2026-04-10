@@ -2,16 +2,35 @@
 
 import {useEffect, useState} from 'react';
 import Link from 'next/link';
+import {supabase} from '../lib/supabaseClient';
 
 export default function HomeMarketplace() {
     const [leiloes, setLeiloes] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isVendedor, setIsVendedor] = useState(false);
 
     useEffect(() => {
-        // Busca os dados reais do nosso backend
+        // 1. Verifica quem está logado
+        const checarUsuario = async () => {
+            const {data: {session}} = await supabase.auth.getSession();
+
+            if (session) {
+                // Se tem alguém logado, descobre o tipo de conta
+                const {data: perfil} = await supabase
+                    .from('perfis')
+                    .select('tipo_usuario')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (perfil?.tipo_usuario === 'vendedor') {
+                    setIsVendedor(true); // 🟢 Libera o botão!
+                }
+            }
+        };
+
+        // 2. Busca os leilões
         const buscarLeiloes = async () => {
             try {
-                // Se estiver com o Supabase desligado no teste, use dados falsos aqui
                 const resposta = await fetch('http://localhost:3001/api/leiloes');
                 if (resposta.ok) {
                     const dados = await resposta.json();
@@ -24,31 +43,17 @@ export default function HomeMarketplace() {
             }
         };
 
+        checarUsuario();
         buscarLeiloes();
     }, []);
 
-    const formatarDinheiro = (centavos: number) => {
+    const formatarDinheiro = (centavos) => {
         return (centavos / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
     };
 
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 font-sans">
             <div className="max-w-7xl mx-auto">
-
-                {/* Cabeçalho da Vitrine */}
-                <div className="flex justify-between items-end mb-10 border-b border-gray-800 pb-6">
-                    <div>
-                        <h1 className="text-4xl font-black text-white tracking-tight">Box<span
-                            className="text-orange-500">64</span></h1>
-                        <p className="text-gray-400 mt-2">Leilões exclusivos de miniaturas raras.</p>
-                    </div>
-                    <Link href="/admin/novo-leilao"
-                          className="text-sm font-bold text-orange-500 hover:text-orange-400 transition-colors">
-                        + Vender Miniatura
-                    </Link>
-                </div>
-
-                {/* Grid de Produtos */}
                 {loading ? (
                     <p className="text-center text-gray-500 mt-20 animate-pulse">Buscando máquinas na garagem...</p>
                 ) : (

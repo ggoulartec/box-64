@@ -148,7 +148,7 @@ export default function SalaDeLeilao({ params }) {
                 </div>
 
                 <div
-                    className="max-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
+                    className="max-h-[539px] min-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
                     <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
                     <div className="flex-1 overflow-y-auto space-y-3">
                         {historico.length === 0 ? (
