@@ -132,46 +132,40 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('enviar_lance', async (dadosLance) => {
-        const leilao = leiloesAtivosCache[dadosLance.leilaoId];
-        if (!leilao) return socket.emit('erro_lance', {msg: 'Leilão não encontrado.'});
+    socket.on('enviar_lance', async (dados) => {
+        try {
+            const { error: erroLance } = await supabase
+                .from('lances')
+                .insert([{
+                    leilao_id: dados.leilaoId,
+                    usuario_id: dados.usuarioId,
+                    valor: dados.valor
+                }]);
 
-        const agora = Date.now();
-        const tempoRestanteMs = leilao.dataFim - agora;
+            if (erroLance) throw erroLance;
 
-        if (tempoRestanteMs <= 0) return socket.emit('erro_lance', {msg: 'Este leilão já foi encerrado.'});
-        if (tempoRestanteMs <= 15000) return socket.emit('erro_lance', {msg: 'Zona Morta: Não é possível dar lances nos últimos 15 segundos!'});
+            const novoDataFim = new Date(Date.now() + 5 * 60000).toISOString();
 
-        const lanceMinimo = calcularProximoLanceMinimo(leilao.lanceAtual);
-        if (dadosLance.valor < lanceMinimo) {
-            return socket.emit('erro_lance', {msg: `O valor mínimo é R$ ${(lanceMinimo / 100).toFixed(2)}`});
+            const { error: erroUpdate } = await supabase
+                .from('leiloes')
+                .update({
+                    lance_atual: dados.valor,
+                    data_fim: novoDataFim
+                })
+                .eq('id', dados.leilaoId);
+
+            if (erroUpdate) throw erroUpdate;
+
+            io.to(dados.leilaoId).emit('novo_lance_aceito', {
+                valor: dados.valor,
+                usuario: dados.apelido,
+                novoDataFim: Date.parse(novoDataFim)
+            });
+
+        } catch (error) {
+            console.error("Erro ao salvar lance:", error);
+            socket.emit('erro_lance', { msg: "Falha ao processar seu lance no banco de dados." });
         }
-
-        // Passou pelas regras! Atualiza o cache e aplica Anti-Sniper
-        leilao.lanceAtual = dadosLance.valor;
-        let tempoEstendido = false;
-        if (tempoRestanteMs <= 30000) {
-            leilao.dataFim = agora + 30000;
-            tempoEstendido = true;
-            // Atualiza o tempo no banco
-            await supabase.from('leiloes').update({ data_fim: new Date(leilao.dataFim).toISOString() }).eq('id', dadosLance.leilaoId);
-        }
-
-        // 💾 SALVA O LANCE NO BANCO DE DADOS OFICIAL E ATUALIZA O LEILÃO
-        await supabase.from('leiloes').update({ lance_atual: dadosLance.valor }).eq('id', dadosLance.leilaoId);
-
-        await supabase.from('lances').insert([{
-            leilao_id: dadosLance.leilaoId,
-            usuario_id: dadosLance.usuario_id,
-            valor: dadosLance.valor
-        }]);
-
-        io.to(dadosLance.leilaoId).emit('novo_lance_aceito', {
-            valor: dadosLance.valor,
-            usuario: dadosLance.isAnonimo ? 'Licitante Anônimo' : dadosLance.apelido,
-            novoDataFim: leilao.dataFim,
-            tempoEstendido: tempoEstendido
-        });
     });
 });
 

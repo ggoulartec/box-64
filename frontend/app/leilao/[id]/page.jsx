@@ -96,6 +96,18 @@ export default function SalaDeLeilao({params}) {
         return (centavos / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
     };
 
+    const formatarTempo = (totalSegundos) => {
+        if (totalSegundos <= 0) return "00d 00h 00m 00s";
+
+        const d = Math.floor(totalSegundos / (3600 * 24));
+        const h = Math.floor((totalSegundos % (3600 * 24)) / 3600);
+        const m = Math.floor((totalSegundos % 3600) / 60);
+        const s = totalSegundos % 60;
+
+        // Visual mais limpo, sem os ":"
+        return `${String(d).padStart(2, '0')}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    };
+
     const corRelogio = tempoRestante <= 15 ? 'text-red-500 animate-pulse' : 'text-white';
 
     // Enquanto o carro não carrega, mostramos uma tela preta limpa
@@ -135,8 +147,8 @@ export default function SalaDeLeilao({params}) {
             <div className="w-full md:w-1/3 flex flex-col gap-6">
                 <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl border border-gray-700 text-center">
                     <p className="text-gray-400 mb-1 uppercase tracking-widest text-sm">Tempo Restante</p>
-                    <div className={`text-6xl font-black font-mono mb-6 ${corRelogio}`}>
-                        {tempoRestante}s
+                    <div className={`text-3xl lg:text-4xl font-black font-mono mb-6 tracking-tighter whitespace-nowrap ${corRelogio}`}>
+                        {formatarTempo(tempoRestante)}
                     </div>
 
                     <p className="text-gray-400 mb-1 uppercase tracking-widest text-sm">Lance Atual</p>
@@ -163,7 +175,7 @@ export default function SalaDeLeilao({params}) {
                 </div>
 
                 <div
-                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col min-h-112.5 max-h-112.5">
+                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col min-h-[422px] max-h-105.5">
                     <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
                     <div className="flex-1 overflow-y-auto space-y-3">
                         {historico.length === 0 ? (
