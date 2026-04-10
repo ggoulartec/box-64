@@ -2,10 +2,11 @@
 
 import {use, useEffect, useState} from 'react';
 import {io} from 'socket.io-client';
+import {supabase} from '../../../lib/supabaseClient';
 
 const socket = io('http://localhost:3001');
 
-export default function SalaDeLeilao({ params }) {
+export default function SalaDeLeilao({params}) {
     const parametros = use(params);
     const leilaoId = parametros.id;
     const [carro, setCarro] = useState(null); // Vai guardar os dados da miniatura
@@ -13,6 +14,8 @@ export default function SalaDeLeilao({ params }) {
     const [tempoRestante, setTempoRestante] = useState(0);
     const [historico, setHistorico] = useState([]);
     const [mensagemErro, setMensagemErro] = useState('');
+    const [sessao, setSessao] = useState(null);
+    const [meuApelido, setMeuApelido] = useState('');
 
     const atualizarRelogio = (dataFimMs) => {
         const intervalo = setInterval(() => {
@@ -25,6 +28,16 @@ export default function SalaDeLeilao({ params }) {
 
     useEffect(() => {
         // 1. Busca os detalhes visuais do carro na nossa nova Rota da API
+        const carregarUsuario = async () => {
+            const {data: {session}} = await supabase.auth.getSession();
+            if (session) {
+                setSessao(session);
+                const {data} = await supabase.from('perfis').select('apelido').eq('id', session.user.id).single();
+                if (data) setMeuApelido(data.apelido);
+            }
+        };
+        carregarUsuario();
+
         const buscarDetalhesDoCarro = async () => {
             try {
                 const resposta = await fetch(`http://localhost:3001/api/leiloes/${leilaoId}`);
@@ -72,8 +85,8 @@ export default function SalaDeLeilao({ params }) {
         const proximoValor = lanceAtual + 5000;
         socket.emit('enviar_lance', {
             leilaoId: leilaoId,
-            usuarioId: 'meu_usuario_falso_123',
-            apelido: 'ColecionadorBR',
+            usuarioId: sessao.user.id,
+            apelido: meuApelido,
             valor: proximoValor,
             isAnonimo: false
         });
@@ -90,7 +103,7 @@ export default function SalaDeLeilao({ params }) {
         a máquina...</div>;
 
     return (
-        <div className="min-h-screen bg-[#121212] text-gray-100 p-8 flex flex-col md:flex-row gap-8 font-sans">
+        <div className="bg-[#121212] text-gray-100 p-8 flex flex-col md:flex-row gap-8 font-sans">
             {/* COLUNA ESQUERDA: A Miniatura (Agora Dinâmica!) */}
             <div className="flex-1 bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700">
                 <div
@@ -140,15 +153,17 @@ export default function SalaDeLeilao({ params }) {
 
                     <button
                         onClick={handleDarLance}
-                        disabled={tempoRestante === 0}
+                        disabled={tempoRestante === 0 || !sessao}
                         className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 text-white font-bold text-2xl py-5 rounded-xl transition-all transform active:scale-95 shadow-[0_0_15px_rgba(234,88,12,0.5)]"
                     >
-                        {tempoRestante === 0 ? 'LEILÃO ENCERRADO' : 'DAR LANCE'}
+                        {tempoRestante === 0
+                            ? 'LEILÃO ENCERRADO'
+                            : (!sessao ? '🔐 FAÇA LOGIN PARA LANCE' : 'DAR LANCE')}
                     </button>
                 </div>
 
                 <div
-                    className="max-h-[539px] min-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
+                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col min-h-112.5 max-h-112.5">
                     <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
                     <div className="flex-1 overflow-y-auto space-y-3">
                         {historico.length === 0 ? (

@@ -24,7 +24,7 @@ app.post('/api/leiloes', async (req, res) => {
         const { data: miniatura, error: erroMiniatura } = await supabase
             .from('miniaturas')
             .insert([{
-                vendedor_id: "02abba15-1fb0-4330-b1ad-00538486d600", // Falso por enquanto (até termos login)
+                vendedor_id: dados.vendedor_id,
                 titulo: dados.titulo,
                 descricao: dados.descricao,
                 fotos: dados.fotos,
@@ -43,7 +43,7 @@ app.post('/api/leiloes', async (req, res) => {
             .from('leiloes')
             .insert([{
                 miniatura_id: miniatura.id,
-                vendedor_id: "02abba15-1fb0-4330-b1ad-00538486d600", // Falso
+                vendedor_id: dados.vendedor_id,
                 preco_inicial: dados.preco_inicial,
                 lance_atual: dados.preco_inicial,
                 data_inicio: dados.data_inicio,
@@ -162,7 +162,7 @@ io.on('connection', (socket) => {
 
         await supabase.from('lances').insert([{
             leilao_id: dadosLance.leilaoId,
-            usuario_id: "02abba15-1fb0-4330-b1ad-00538486d600", // Falso até ter login
+            usuario_id: dadosLance.usuario_id,
             valor: dadosLance.valor
         }]);
 

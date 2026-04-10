@@ -27,7 +27,7 @@ export default function RootLayout({children}) {
 
         <Navbar/>
 
-        <main className="flex-1">
+        <main className="flex justify-center w-full">
             {children}
         </main>
 
