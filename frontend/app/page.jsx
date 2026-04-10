@@ -8,6 +8,7 @@ export default function HomeMarketplace() {
     const [leiloes, setLeiloes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isVendedor, setIsVendedor] = useState(false);
+    const [abaAtiva, setAbaAtiva] = useState('ativos');
 
     useEffect(() => {
         // 1. Verifica quem está logado
@@ -30,14 +31,13 @@ export default function HomeMarketplace() {
 
         // 2. Busca os leilões
         const buscarLeiloes = async () => {
+            setLoading(true);
             try {
-                const resposta = await fetch('http://localhost:3001/api/leiloes');
+                const resposta = await fetch(`http://localhost:3001/api/leiloes?aba=${abaAtiva}`);
                 if (resposta.ok) {
                     const dados = await resposta.json();
                     setLeiloes(dados);
                 }
-            } catch (error) {
-                console.error("Erro de conexão", error);
             } finally {
                 setLoading(false);
             }
@@ -45,7 +45,7 @@ export default function HomeMarketplace() {
 
         checarUsuario();
         buscarLeiloes();
-    }, []);
+    }, [abaAtiva]);
 
     const formatarDinheiro = (centavos) => {
         return (centavos / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
@@ -54,6 +54,26 @@ export default function HomeMarketplace() {
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 font-sans">
             <div className="max-w-7xl mx-auto">
+                <div className="flex gap-4 mb-8 border-b border-gray-800 pb-4">
+                    <button
+                        onClick={() => setAbaAtiva('ativos')}
+                        className={`px-4 py-2 font-bold rounded-lg transition ${abaAtiva === 'ativos' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        🔥 Ativos
+                    </button>
+                    <button
+                        onClick={() => setAbaAtiva('recentes')}
+                        className={`px-4 py-2 font-bold rounded-lg transition ${abaAtiva === 'recentes' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        🏁 Finalizados (24h)
+                    </button>
+                    <button
+                        onClick={() => setAbaAtiva('arquivo')}
+                        className={`px-4 py-2 font-bold rounded-lg transition ${abaAtiva === 'arquivo' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        📚 Arquivo (30 dias)
+                    </button>
+                </div>
                 {loading ? (
                     <p className="text-center text-gray-500 mt-20 animate-pulse">Buscando máquinas na garagem...</p>
                 ) : (

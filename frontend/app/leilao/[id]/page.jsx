@@ -9,13 +9,15 @@ const socket = io('http://localhost:3001');
 export default function SalaDeLeilao({params}) {
     const parametros = use(params);
     const leilaoId = parametros.id;
-    const [carro, setCarro] = useState(null); // Vai guardar os dados da miniatura
+    const [carro, setCarro] = useState(null);
     const [lanceAtual, setLanceAtual] = useState(0);
     const [tempoRestante, setTempoRestante] = useState(0);
     const [historico, setHistorico] = useState([]);
     const [mensagemErro, setMensagemErro] = useState('');
     const [sessao, setSessao] = useState(null);
     const [meuApelido, setMeuApelido] = useState('');
+    const [vencedorOficial, setVencedorOficial] = useState(null);
+    const [statusLeilao, setStatusLeilao] = useState('ativo');
 
     const atualizarRelogio = (dataFimMs) => {
         const intervalo = setInterval(() => {
@@ -36,7 +38,6 @@ export default function SalaDeLeilao({params}) {
                 if (data) setMeuApelido(data.apelido);
             }
         };
-        carregarUsuario();
 
         const buscarDetalhesDoCarro = async () => {
             try {
@@ -44,24 +45,43 @@ export default function SalaDeLeilao({params}) {
                 if (resposta.ok) {
                     const dados = await resposta.json();
                     setCarro(dados.miniaturas);
+                    setStatusLeilao(dados.status);
                 }
             } catch (error) {
-                console.error("Erro ao buscar detalhes do carro:", error);
+                console.error("Erro ao buscar detalhes:", error);
             }
         };
+
+        const buscarHistoricoDeLances = async () => {
+            try {
+                const resposta = await fetch(`http://localhost:3001/api/leiloes/${leilaoId}/lances`);
+                if (resposta.ok) {
+                    const dados = await resposta.json();
+                    setHistorico(dados);
+                }
+            } catch (error) {
+                console.error("Erro ao buscar histórico:", error);
+            }
+        }
+
+        carregarUsuario();
         buscarDetalhesDoCarro();
+        buscarHistoricoDeLances();
 
         // 2. Conecta no WebSocket para a mágica do tempo real
         socket.emit('entrar_sala_leilao', leilaoId);
 
         socket.on('estado_inicial', (estado) => {
             setLanceAtual(estado.lanceAtual);
-            atualizarRelogio(estado.dataFim);
+            const diff = Math.max(0, Math.floor((estado.dataFim - Date.now()) / 1000));
+            setTempoRestante(diff);
         });
 
         socket.on('novo_lance_aceito', (dados) => {
             setLanceAtual(dados.valor);
-            atualizarRelogio(dados.novoDataFim);
+            const diff = Math.max(0, Math.floor((dados.novoDataFim - Date.now()) / 1000));
+            setTempoRestante(diff);
+
             setHistorico(prev => [{
                 usuario: dados.usuario,
                 valor: dados.valor,
@@ -69,17 +89,43 @@ export default function SalaDeLeilao({params}) {
             }, ...prev]);
         });
 
-        socket.on('erro_lance', (erro) => {
-            setMensagemErro(erro.msg);
-            setTimeout(() => setMensagemErro(''), 3000);
+        socket.on('leilao_finalizado', (dados) => {
+            setVencedorOficial(dados);
+            setStatusLeilao('finalizado');
+            setTempoRestante(0);
+            alert(`🔨 MARTELO BATIDO! Vencedor: ${dados.vencedor}`);
         });
 
         return () => {
             socket.off('estado_inicial');
             socket.off('novo_lance_aceito');
-            socket.off('erro_lance');
+            socket.off('leilao_finalizado');
         };
     }, [leilaoId]);
+
+    useEffect(() => {
+        if (statusLeilao === 'finalizado' && historico.length > 0 && !vencedorOficial) {
+            setVencedorOficial({
+                vencedor: historico[0].usuario,
+                valorFinal: historico[0].valor
+            });
+        }
+    }, [statusLeilao, historico]);
+
+    useEffect(() => {
+        if (tempoRestante <= 0) {
+            if (statusLeilao === 'ativo' && carro) {
+                socket.emit('encerrar_leilao', leilaoId);
+            }
+            return;
+        };
+
+        const timer = setInterval(() => {
+            setTempoRestante(prev => prev - 1);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [tempoRestante, leilaoId, carro, statusLeilao]);
 
     const handleDarLance = () => {
         const proximoValor = lanceAtual + 5000;
@@ -147,7 +193,8 @@ export default function SalaDeLeilao({params}) {
             <div className="w-full md:w-1/3 flex flex-col gap-6">
                 <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl border border-gray-700 text-center">
                     <p className="text-gray-400 mb-1 uppercase tracking-widest text-sm">Tempo Restante</p>
-                    <div className={`text-3xl lg:text-4xl font-black font-mono mb-6 tracking-tighter whitespace-nowrap ${corRelogio}`}>
+                    <div
+                        className={`text-3xl lg:text-4xl font-black font-mono mb-6 tracking-tighter whitespace-nowrap ${corRelogio}`}>
                         {formatarTempo(tempoRestante)}
                     </div>
 
@@ -175,17 +222,34 @@ export default function SalaDeLeilao({params}) {
                 </div>
 
                 <div
-                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col min-h-[422px] max-h-105.5">
-                    <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
+                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col min-h-105.5 max-h-105.5">
+                    <h3 className="items-center text-lg font-bold mb-4 border-b border-gray-700 pb-2 flex justify-between">
+                        Histórico de Lances
+                        {vencedorOficial && <span className="text-orange-500 text-sm">FINALIZADO</span>}
+                    </h3>
+
                     <div className="flex-1 overflow-y-auto space-y-3">
+                        {/* CARD DE VENCEDOR (Aparece apenas quando o leilão fecha) */}
+                        {vencedorOficial && (
+                            <div
+                                className="bg-orange-500/20 border-2 border-orange-500 p-4 rounded-xl mb-4 mt-6.25 animate-bounce">
+                                <p className="text-orange-500 text-xs font-black uppercase text-center">🏆 ARREMATADO POR
+                                    🏆</p>
+                                <p className="text-white text-xl font-bold text-center">{vencedorOficial.vencedor}</p>
+                                <p className="text-orange-400 text-center font-mono font-bold">{formatarDinheiro(vencedorOficial.valorFinal)}</p>
+                            </div>
+                        )}
+
                         {historico.length === 0 ? (
-                            <p className="text-gray-500 text-center mt-10">Nenhum lance ainda. Seja o primeiro!</p>
+                            <p className="text-gray-500 text-center mt-10">Nenhum lance ainda.</p>
                         ) : (
                             historico.map((h, i) => (
                                 <div key={i}
-                                     className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
+                                     className={`flex justify-between items-center p-3 rounded-lg ${vencedorOficial?.vencedor === h.usuario ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-gray-700/50'}`}>
                                     <div>
-                                        <p className="font-bold text-gray-200">{h.usuario}</p>
+                                        <p className={`font-bold ${vencedorOficial?.vencedor === h.usuario ? 'text-orange-400' : 'text-gray-200'}`}>
+                                            {h.usuario} {vencedorOficial?.vencedor === h.usuario && "👑"}
+                                        </p>
                                         <p className="text-xs text-gray-400">{h.hora}</p>
                                     </div>
                                     <div className="font-bold text-green-400">
