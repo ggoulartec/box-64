@@ -1,67 +1,66 @@
-'use client'; // Avisa o Next.js que esta tela precisa rodar no navegador para ter interatividade
+'use client';
 
-import { useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import {use, useEffect, useState} from 'react';
+import {io} from 'socket.io-client';
 
-// Conecta ao nosso servidor Node.js (depois trocamos pela URL do Render)
 const socket = io('http://localhost:3001');
 
 export default function SalaDeLeilao({ params }) {
-    const leilaoId = params.id || "leilao_datsun_123";
-
-    // Estados da nossa tela
+    const parametros = use(params);
+    const leilaoId = parametros.id;
+    const [carro, setCarro] = useState(null); // Vai guardar os dados da miniatura
     const [lanceAtual, setLanceAtual] = useState(0);
     const [tempoRestante, setTempoRestante] = useState(0);
     const [historico, setHistorico] = useState([]);
     const [mensagemErro, setMensagemErro] = useState('');
 
-    // Função para manter o relógio rodando na tela
     const atualizarRelogio = (dataFimMs) => {
         const intervalo = setInterval(() => {
             const agora = Date.now();
             const diff = Math.max(0, Math.floor((dataFimMs - agora) / 1000));
             setTempoRestante(diff);
-
             if (diff <= 0) clearInterval(intervalo);
         }, 1000);
     };
 
-    // Efeito que roda assim que a página abre
     useEffect(() => {
-        // 1. Entra na sala
+        // 1. Busca os detalhes visuais do carro na nossa nova Rota da API
+        const buscarDetalhesDoCarro = async () => {
+            try {
+                const resposta = await fetch(`http://localhost:3001/api/leiloes/${leilaoId}`);
+                if (resposta.ok) {
+                    const dados = await resposta.json();
+                    setCarro(dados.miniaturas);
+                }
+            } catch (error) {
+                console.error("Erro ao buscar detalhes do carro:", error);
+            }
+        };
+        buscarDetalhesDoCarro();
+
+        // 2. Conecta no WebSocket para a mágica do tempo real
         socket.emit('entrar_sala_leilao', leilaoId);
 
-        // 2. Recebe o estado atual assim que entra
         socket.on('estado_inicial', (estado) => {
             setLanceAtual(estado.lanceAtual);
             atualizarRelogio(estado.dataFim);
         });
 
-        // 3. Ouve quando QUALQUER PESSOA dá um lance com sucesso
         socket.on('novo_lance_aceito', (dados) => {
             setLanceAtual(dados.valor);
             atualizarRelogio(dados.novoDataFim);
-
-            // Adiciona no topo do histórico
             setHistorico(prev => [{
                 usuario: dados.usuario,
                 valor: dados.valor,
                 hora: new Date().toLocaleTimeString()
             }, ...prev]);
-
-            // Efeito visual de Anti-Sniper
-            if (dados.tempoEstendido) {
-                console.log("⏱️ Tempo estendido! Regra Anti-Sniper ativada.");
-            }
         });
 
-        // 4. Ouve se o NOSSO lance deu erro (Zona Morta, valor baixo, etc)
         socket.on('erro_lance', (erro) => {
             setMensagemErro(erro.msg);
-            setTimeout(() => setMensagemErro(''), 3000); // Limpa o erro após 3s
+            setTimeout(() => setMensagemErro(''), 3000);
         });
 
-        // Limpa a conexão ao sair da página
         return () => {
             socket.off('estado_inicial');
             socket.off('novo_lance_aceito');
@@ -69,44 +68,58 @@ export default function SalaDeLeilao({ params }) {
         };
     }, [leilaoId]);
 
-    // Função do botão gigante laranja
     const handleDarLance = () => {
-        // Simulando o cálculo do próximo lance no frontend só para enviar o valor certo
-        const proximoValor = lanceAtual + 5000; // Ex: Incremento fixo de R$ 50 para o teste
-
+        const proximoValor = lanceAtual + 5000;
         socket.emit('enviar_lance', {
             leilaoId: leilaoId,
-            usuarioId: 'meu_usuario_falso_123', // Depois virá do Supabase Auth
+            usuarioId: 'meu_usuario_falso_123',
             apelido: 'ColecionadorBR',
             valor: proximoValor,
             isAnonimo: false
         });
     };
 
-    // Formata o dinheiro (de centavos para Reais)
     const formatarDinheiro = (centavos) => {
-        return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        return (centavos / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
     };
 
-    // Cores de alerta para o relógio
     const corRelogio = tempoRestante <= 15 ? 'text-red-500 animate-pulse' : 'text-white';
+
+    // Enquanto o carro não carrega, mostramos uma tela preta limpa
+    if (!carro) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white">Carregando
+        a máquina...</div>;
 
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 flex flex-col md:flex-row gap-8 font-sans">
-
-            {/* COLUNA ESQUERDA: A Miniatura */}
+            {/* COLUNA ESQUERDA: A Miniatura (Agora Dinâmica!) */}
             <div className="flex-1 bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700">
-                <div className="w-full h-96 bg-gray-700 rounded-xl mb-6 flex items-center justify-center">
-                    <span className="text-gray-500 text-xl">[ Foto Gigante do Datsun 510 STH ]</span>
+                <div
+                    className="w-full h-[500px] bg-gray-900 rounded-xl mb-6 flex items-center justify-center overflow-hidden border border-gray-700 relative">
+                    {carro.fotos && carro.fotos[0] ? (
+                        <img src={carro.fotos[0]} alt={carro.titulo} className="w-full h-full object-contain"/>
+                    ) : (
+                        <span className="text-gray-500 text-xl">[ Sem Foto Cadastrada ]</span>
+                    )}
+
+                    {/* Tag visual de STH/TH na foto se existir */}
+                    {carro.is_sth && (
+                        <span
+                            className="absolute top-4 right-4 bg-pink-600 text-white font-black px-3 py-1 rounded shadow-lg text-sm border border-pink-400">
+                            $TH
+                        </span>
+                    )}
                 </div>
-                <h1 className="text-3xl font-bold text-white mb-2">Datsun Bluebird 510</h1>
-                <p className="text-gray-400">Série: Super Treasure Hunt (2021) • Estado: Lacrado</p>
+
+                <h1 className="text-3xl font-bold text-white mb-2">{carro.titulo}</h1>
+                <p className="text-gray-400 flex items-center gap-2">
+                    Série: <span className="font-semibold text-gray-200">{carro.serie}</span>
+                    {carro.is_th && <span
+                        className="bg-gray-700 px-2 py-0.5 rounded text-xs text-orange-400 font-bold border border-gray-600">TH</span>}
+                </p>
             </div>
 
-            {/* COLUNA DIREITA: Command Center (Onde o dinheiro rola) */}
+            {/* COLUNA DIREITA: Command Center */}
             <div className="w-full md:w-1/3 flex flex-col gap-6">
-
-                {/* Painel do Relógio e Lance */}
                 <div className="bg-gray-800 p-6 rounded-2xl shadow-2xl border border-gray-700 text-center">
                     <p className="text-gray-400 mb-1 uppercase tracking-widest text-sm">Tempo Restante</p>
                     <div className={`text-6xl font-black font-mono mb-6 ${corRelogio}`}>
@@ -134,8 +147,8 @@ export default function SalaDeLeilao({ params }) {
                     </button>
                 </div>
 
-                {/* Feed de Histórico ao Vivo */}
-                <div className="max-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
+                <div
+                    className="max-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
                     <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
                     <div className="flex-1 overflow-y-auto space-y-3">
                         {historico.length === 0 ? (
@@ -143,7 +156,7 @@ export default function SalaDeLeilao({ params }) {
                         ) : (
                             historico.map((h, i) => (
                                 <div key={i}
-                                    className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
+                                     className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
                                     <div>
                                         <p className="font-bold text-gray-200">{h.usuario}</p>
                                         <p className="text-xs text-gray-400">{h.hora}</p>
@@ -156,7 +169,6 @@ export default function SalaDeLeilao({ params }) {
                         )}
                     </div>
                 </div>
-
             </div>
         </div>
     );
