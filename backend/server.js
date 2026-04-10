@@ -70,13 +70,17 @@ app.post('/api/leiloes', async (req, res) => {
 
 // 📦 ROTA: Listar Vitrine (Home)
 app.get('/api/leiloes', async (req, res) => {
-    const { aba } = req.query; // Recebe 'ativos', 'recentes' ou 'arquivo'
+    const {aba} = req.query; // Recebe 'ativos', 'recentes' ou 'arquivo'
     const agora = new Date().toISOString();
     const ha24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const ha30Dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     try {
-        let query = supabase.from('leiloes').select('*, miniaturas(*)');
+        let query = supabase.from('leiloes').select(`
+            *, 
+            miniaturas(*),
+            perfis!vencedor_id (apelido)
+        `);
 
         if (aba === 'arquivo') {
             query = query
@@ -91,11 +95,11 @@ app.get('/api/leiloes', async (req, res) => {
             query = query.eq('status', 'ativo').gt('data_fim', agora);
         }
 
-        const { data, error } = await query.order('data_fim', { ascending: false });
+        const {data, error} = await query.order('data_fim', {ascending: false});
         if (error) throw error;
         res.json(data);
     } catch (error) {
-        res.status(500).json({ erro: error.message });
+        res.status(500).json({erro: error.message});
     }
 });
 
@@ -217,11 +221,11 @@ io.on('connection', (socket) => {
 
     socket.on('encerrar_leilao', async (leilaoId) => {
         try {
-            const { data: maiorLance, error: erroBusca } = await supabase
+            const {data: maiorLance, error: erroBusca} = await supabase
                 .from('lances')
                 .select('usuario_id, valor, perfis(apelido)')
                 .eq('leilao_id', leilaoId)
-                .order('valor', { ascending: false })
+                .order('valor', {ascending: false})
                 .limit(1)
                 .maybeSingle();
 
@@ -231,7 +235,7 @@ io.on('connection', (socket) => {
             const vencedorNome = maiorLance ? maiorLance.perfis.apelido : 'Sem Vencedor';
             const valorFinal = maiorLance ? maiorLance.valor : 0;
 
-            const { error: erroUpdate } = await supabase
+            const {error: erroUpdate} = await supabase
                 .from('leiloes')
                 .update({
                     status: 'finalizado',
