@@ -13,6 +13,70 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const leiloesAtivos = {
+    "leilao_datsun_123": {
+        lanceAtual: 4000,
+        dataFim: new Date(Date.now() + 600000).getTime()
+    }
+};
+
+let bancoDeDadosVitrine = [
+    {
+        id: "leilao_datsun_123",
+        preco_inicial: 4000,
+        lance_atual: 4000,
+        data_fim: new Date(Date.now() + 600000).toISOString(),
+        status: 'ativo',
+        miniaturas: {
+            titulo: "Datsun Bluebird 510",
+            fotos: [""],
+            serie: "Super Treasure Hunt",
+            is_th: false,
+            is_sth: true
+        }
+    }
+];
+
+app.post('/api/leiloes', (req, res) => {
+    const dados = req.body;
+
+    // 1. Criamos um ID único falso para o carro novo
+    const novoId = 'leilao_' + Date.now();
+
+    // 2. Montamos o objeto igual o banco de dados faria
+    const novoLeilao = {
+        id: novoId,
+        preco_inicial: dados.preco_inicial,
+        lance_atual: dados.preco_inicial,
+        data_fim: dados.data_fim,
+        status: 'ativo',
+        miniaturas: {
+            titulo: dados.titulo,
+            fotos: dados.fotos, // Aqui vai entrar o link da foto do seu Civic!
+            serie: dados.serie,
+            is_th: dados.is_th,
+            is_sth: dados.is_sth
+        }
+    };
+
+    // 3. Salvamos na Vitrine (Para a Home Page)
+    bancoDeDadosVitrine.push(novoLeilao);
+
+    // 4. Salvamos no motor do WebSocket (Para aceitar lances)
+    leiloesAtivos[novoId] = {
+        lanceAtual: dados.preco_inicial,
+        dataFim: new Date(dados.data_fim).getTime()
+    };
+
+    console.log(`🚗 Novo carro na pista: ${dados.titulo}`);
+    res.status(201).json({ mensagem: 'Leilão criado com sucesso na memória!', leilao: novoLeilao });
+});
+
+// 📦 ROTA: Listar Leilões Ativos (Para a Página Inicial)
+app.get('/api/leiloes', (req, res) => {
+    res.status(200).json(bancoDeDadosVitrine);
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {cors: {origin: "*", methods: ["GET", "POST"]}});
 
@@ -39,15 +103,7 @@ function calcularProximoLanceMinimo(lanceAtual) {
     return lanceAtual + faixa.incremento;
 }
 
-// 🗄️ 2. Estado em Memória (Simulando o Redis/Banco para o MVP)
-// Em produção, esses dados virão do Supabase quando o servidor iniciar
-const leiloesAtivos = {
-    "leilao_datsun_123": {
-        lanceAtual: 4000, // R$ 40,00
-        // Simulando um leilão que acaba daqui a 45 segundos
-        dataFim: new Date(Date.now() + 600000).getTime()
-    }
-};
+
 
 // 🎧 3. Ouvindo conexões dos usuários
 io.on('connection', (socket) => {

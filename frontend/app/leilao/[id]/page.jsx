@@ -1,12 +1,12 @@
 'use client'; // Avisa o Next.js que esta tela precisa rodar no navegador para ter interatividade
 
-import {useEffect, useState} from 'react';
-import {io} from 'socket.io-client';
+import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 
 // Conecta ao nosso servidor Node.js (depois trocamos pela URL do Render)
 const socket = io('http://localhost:3001');
 
-export default function SalaDeLeilao({params}) {
+export default function SalaDeLeilao({ params }) {
     const leilaoId = params.id || "leilao_datsun_123";
 
     // Estados da nossa tela
@@ -14,6 +14,17 @@ export default function SalaDeLeilao({params}) {
     const [tempoRestante, setTempoRestante] = useState(0);
     const [historico, setHistorico] = useState([]);
     const [mensagemErro, setMensagemErro] = useState('');
+
+    // Função para manter o relógio rodando na tela
+    const atualizarRelogio = (dataFimMs) => {
+        const intervalo = setInterval(() => {
+            const agora = Date.now();
+            const diff = Math.max(0, Math.floor((dataFimMs - agora) / 1000));
+            setTempoRestante(diff);
+
+            if (diff <= 0) clearInterval(intervalo);
+        }, 1000);
+    };
 
     // Efeito que roda assim que a página abre
     useEffect(() => {
@@ -58,17 +69,6 @@ export default function SalaDeLeilao({params}) {
         };
     }, [leilaoId]);
 
-    // Função para manter o relógio rodando na tela
-    const atualizarRelogio = (dataFimMs) => {
-        const intervalo = setInterval(() => {
-            const agora = Date.now();
-            const diff = Math.max(0, Math.floor((dataFimMs - agora) / 1000));
-            setTempoRestante(diff);
-
-            if (diff <= 0) clearInterval(intervalo);
-        }, 1000);
-    };
-
     // Função do botão gigante laranja
     const handleDarLance = () => {
         // Simulando o cálculo do próximo lance no frontend só para enviar o valor certo
@@ -85,7 +85,7 @@ export default function SalaDeLeilao({params}) {
 
     // Formata o dinheiro (de centavos para Reais)
     const formatarDinheiro = (centavos) => {
-        return (centavos / 100).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+        return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
 
     // Cores de alerta para o relógio
@@ -135,8 +135,7 @@ export default function SalaDeLeilao({params}) {
                 </div>
 
                 {/* Feed de Histórico ao Vivo */}
-                <div
-                    className="bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
+                <div className="max-h-[539px] bg-gray-800 p-6 rounded-2xl border border-gray-700 flex-1 overflow-hidden flex flex-col">
                     <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">Histórico de Lances</h3>
                     <div className="flex-1 overflow-y-auto space-y-3">
                         {historico.length === 0 ? (
@@ -144,7 +143,7 @@ export default function SalaDeLeilao({params}) {
                         ) : (
                             historico.map((h, i) => (
                                 <div key={i}
-                                     className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
+                                    className="flex justify-between items-center bg-gray-700/50 p-3 rounded-lg">
                                     <div>
                                         <p className="font-bold text-gray-200">{h.usuario}</p>
                                         <p className="text-xs text-gray-400">{h.hora}</p>
