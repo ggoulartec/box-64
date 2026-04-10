@@ -3,6 +3,7 @@
 import {use, useEffect, useState} from 'react';
 import {io} from 'socket.io-client';
 import {supabase} from '../../../lib/supabaseClient';
+import Link from "next/link";
 
 const socket = io('http://localhost:3001');
 
@@ -18,6 +19,7 @@ export default function SalaDeLeilao({params}) {
     const [meuApelido, setMeuApelido] = useState('');
     const [vencedorOficial, setVencedorOficial] = useState(null);
     const [statusLeilao, setStatusLeilao] = useState('ativo');
+    const [dadosLeilao, setDadosLeilao] = useState(null); // Vai guardar os dados gerais
 
     const atualizarRelogio = (dataFimMs) => {
         const intervalo = setInterval(() => {
@@ -46,6 +48,7 @@ export default function SalaDeLeilao({params}) {
                     const dados = await resposta.json();
                     setCarro(dados.miniaturas);
                     setStatusLeilao(dados.status);
+                    setDadosLeilao(dados);
                 }
             } catch (error) {
                 console.error("Erro ao buscar detalhes:", error);
@@ -118,7 +121,8 @@ export default function SalaDeLeilao({params}) {
                 socket.emit('encerrar_leilao', leilaoId);
             }
             return;
-        };
+        }
+        ;
 
         const timer = setInterval(() => {
             setTempoRestante(prev => prev - 1);
@@ -181,12 +185,17 @@ export default function SalaDeLeilao({params}) {
                     )}
                 </div>
 
-                <h1 className="text-3xl font-bold text-white mb-2">{carro.titulo}</h1>
-                <p className="text-gray-400 flex items-center gap-2">
-                    Série: <span className="font-semibold text-gray-200">{carro.serie}</span>
-                    {carro.is_th && <span
-                        className="bg-gray-700 px-2 py-0.5 rounded text-xs text-orange-400 font-bold border border-gray-600">TH</span>}
-                </p>
+                <div className="flex justify-between items-start mb-2">
+                    <h1 className="text-3xl font-bold text-white">{carro.titulo}</h1>
+
+                    {/* O botão Mágico que só o Dono vê! */}
+                    {sessao?.user?.id === dadosLeilao?.vendedor_id && dadosLeilao?.status === 'ativo' && (
+                        <Link href={`/admin/editar-leilao/${leilaoId}`}
+                              className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-bold py-1.5 px-4 rounded-lg border border-gray-600 transition-colors">
+                            ✏️ Editar Info
+                        </Link>
+                    )}
+                </div>
             </div>
 
             {/* COLUNA DIREITA: Command Center */}

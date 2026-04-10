@@ -108,7 +108,7 @@ app.get('/api/leiloes/:id', async (req, res) => {
     try {
         const {data, error} = await supabase
             .from('leiloes')
-            .select('id, preco_inicial, lance_atual, data_fim, status, miniaturas(titulo, fotos, serie, is_th, is_sth)')
+            .select('id, vendedor_id, miniatura_id, preco_inicial, lance_atual, data_fim, status, miniaturas(titulo, fotos, serie, is_th, is_sth)')
             .eq('id', req.params.id)
             .single();
 
@@ -145,6 +145,42 @@ app.get('/api/leiloes/:id/lances', async (req, res) => {
     } catch (error) {
         console.error("Erro ao buscar histórico:", error);
         res.status(500).json({erro: "Falha ao buscar lances."});
+    }
+});
+
+// 📦 ROTA: Editar Leilão/Miniatura
+app.put('/api/leiloes/:id', async (req, res) => {
+    const {id} = req.params;
+    const dados = req.body;
+
+    try {
+        // 1. Descobre qual é a miniatura ligada a esse leilão
+        const {data: leilao, error: erroBusca} = await supabase
+            .from('leiloes')
+            .select('miniatura_id')
+            .eq('id', id)
+            .single();
+
+        if (erroBusca) throw erroBusca;
+
+        // 2. Atualiza apenas os dados visuais do carrinho
+        const {error: erroMiniatura} = await supabase
+            .from('miniaturas')
+            .update({
+                titulo: dados.titulo,
+                serie: dados.serie,
+                fotos: [dados.foto_url],
+                is_th: dados.is_th,
+                is_sth: dados.is_sth
+            })
+            .eq('id', leilao.miniatura_id);
+
+        if (erroMiniatura) throw erroMiniatura;
+
+        res.status(200).json({mensagem: '✅ Miniatura atualizada com sucesso!'});
+    } catch (error) {
+        console.error("Erro ao atualizar:", error);
+        res.status(500).json({erro: 'Falha ao atualizar miniatura.'});
     }
 });
 
