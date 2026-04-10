@@ -18,11 +18,12 @@ app.post('/api/leiloes', async (req, res) => {
     const dados = req.body;
 
     try {
+        // 1. Cria o Evento do Leilão
         const { data: leilao, error: erroLeilao } = await supabase
             .from('leiloes')
             .insert([{
-                miniatura_id: dados.miniatura_id,
                 vendedor_id: dados.vendedor_id,
+                titulo: dados.titulo_leilao,     // 👈 Título do Evento
                 descricao: dados.descricao_leilao,
                 preco_inicial: dados.preco_inicial,
                 lance_atual: dados.preco_inicial,
@@ -34,14 +35,24 @@ app.post('/api/leiloes', async (req, res) => {
 
         if (erroLeilao) throw erroLeilao;
 
+        // 2. Associa os múltiplos carros escolhidos a este leilão
+        const itensParaInserir = dados.miniaturas_ids.map(id => ({
+            leilao_id: leilao.id,
+            miniatura_id: id
+        }));
+
+        const { error: erroItens } = await supabase.from('leilao_itens').insert(itensParaInserir);
+        if (erroItens) throw erroItens;
+
+        // 3. Coloca no Cache para o WebSocket
         leiloesAtivosCache[leilao.id] = {
             lanceAtual: leilao.lance_atual,
             dataFim: new Date(leilao.data_fim).getTime()
         };
 
-        res.status(201).json({ mensagem: 'Leilão lançado com sucesso!', leilao });
+        res.status(201).json({ mensagem: 'Lote criado com sucesso!', leilao });
     } catch (error) {
-        console.error("Erro ao criar leilão:", error);
+        console.error("Erro ao criar lote:", error);
         res.status(500).json({ erro: 'Falha ao criar o leilão.' });
     }
 });
@@ -95,16 +106,29 @@ app.get('/api/leiloes', async (req, res) => {
 // 📦 ROTA: Buscar 1 Leilão (Sala Dinâmica)
 app.get('/api/leiloes/:id', async (req, res) => {
     try {
-        const {data, error} = await supabase
+        // Usa o poder do Supabase para trazer o Leilão e TODOS os carros vinculados a ele
+        const { data, error } = await supabase
             .from('leiloes')
-            .select('id, vendedor_id, miniatura_id, preco_inicial, lance_atual, data_fim, status, miniaturas(titulo, fotos, serie, is_th, is_sth)')
+            .select(`
+                id, vendedor_id, titulo, descricao, preco_inicial, lance_atual, data_fim, status,
+                itens:leilao_itens (
+                    miniatura:miniaturas(titulo, fotos, serie, is_th, is_sth, estado, ano_lancamento)
+                )
+            `)
             .eq('id', req.params.id)
             .single();
 
         if (error) throw error;
-        res.status(200).json(data);
+
+        // Formata os dados para o frontend ficar mais simples
+        const leilaoFormatado = {
+            ...data,
+            miniaturas: data.itens.map(item => item.miniatura) // Transforma num array limpo de carros
+        };
+
+        res.status(200).json(leilaoFormatado);
     } catch (error) {
-        res.status(404).json({erro: 'Leilão não encontrado.'});
+        res.status(404).json({ erro: 'Leilão não encontrado.' });
     }
 });
 
