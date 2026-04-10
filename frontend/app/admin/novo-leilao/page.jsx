@@ -1,6 +1,7 @@
 'use client';
 
 import {useState} from 'react';
+import Link from "next/link";
 
 export default function NovoLeilaoAdmin() {
     const [loading, setLoading] = useState(false);
@@ -66,7 +67,12 @@ export default function NovoLeilaoAdmin() {
 
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 font-sans">
-            <div className="max-w-3xl mx-auto bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
+            <div className="absolute top-8 left-8">
+                <Link href="/" className="text-gray-400 hover:text-orange-500 font-bold flex items-center gap-2 transition-colors">
+                    <span>←</span> Voltar para a Vitrine
+                </Link>
+            </div>
+            <div className="max-w-3xl mx-auto mt-10 bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
                 <h1 className="text-3xl font-bold text-white mb-6">Criar Novo Leilão</h1>
 
                 {mensagem && (
