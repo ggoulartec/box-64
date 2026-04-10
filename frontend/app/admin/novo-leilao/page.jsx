@@ -1,79 +1,80 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useState, useEffect} from 'react';
 import {useRouter} from 'next/navigation';
 import {supabase} from '../../../lib/supabaseClient';
-import Link from "next/link";
+import Link from 'next/link';
 
-export default function NovoLeilaoAdmin() {
+export default function NovoLeilao() {
     const router = useRouter();
+    const [sessao, setSessao] = useState(null);
+    const [estoque, setEstoque] = useState([]);
     const [loading, setLoading] = useState(false);
     const [mensagem, setMensagem] = useState('');
-    const [autorizado, setAutorizado] = useState(false);
-    const [userId, setUserId] = useState(null);
 
+    // Estado do carro selecionado para mostrar o preview
+    const [carroSelecionado, setCarroSelecionado] = useState(null);
+
+    // O formulário agora é só sobre as REGRAS do leilão
     const [form, setForm] = useState({
-        titulo: '',
-        descricao: '',
-        estado: 'Novo/Lacrado',
-        serie: 'Mainline',
-        ano: 2024,
-        is_th: false,
-        is_sth: false,
-        preco_inicial: 50,
-        duracao_minutos: 60,
-        is_anonimo: false,
-        foto_url: ''
+        miniatura_id: '',
+        preco_inicial: '',
+        duracao_dias: '1',
+        descricao_leilao: ''
     });
 
     useEffect(() => {
-        const verificarPermissao = async () => {
+        const inicializar = async () => {
             const {data: {session}} = await supabase.auth.getSession();
+            if (!session) return router.replace('/login');
 
-            if (!session) {
-                router.replace('/login');
-                return;
-            }
-
-            // Se estiver logado, verifica se é Vendedor
-            const {data: perfil} = await supabase
-                .from('perfis')
-                .select('tipo_usuario')
-                .eq('id', session.user.id)
-                .single();
-
-            if (perfil?.tipo_usuario !== 'vendedor') {
-                alert('Acesso negado. Apenas vendedores podem acessar a garagem de criação.');
-                router.replace('/');
-            } else {
-                setUserId(session.user.id);
-                setAutorizado(true);
-            }
+            setSessao(session);
+            buscarEstoque(session.user.id);
         };
-
-        verificarPermissao();
+        inicializar();
     }, [router]);
 
-    const handleChange = (e) => {
-        const {name, value, type, checked} = e.target;
-        setForm({...form, [name]: type === 'checkbox' ? checked : value});
+    const buscarEstoque = async (vendedorId) => {
+        try {
+            const res = await fetch(`http://localhost:3001/api/miniaturas/vendedor/${vendedorId}`);
+            if (res.ok) {
+                const dados = await res.json();
+                setEstoque(dados);
+            }
+        } catch (error) {
+            console.error("Erro ao buscar estoque:", error);
+        }
+    };
+
+    // Quando o usuário escolhe um carro no Dropdown, atualizamos a foto de preview
+    const handleSelecaoCarro = (e) => {
+        const id = e.target.value;
+        setForm({...form, miniatura_id: id});
+        const carro = estoque.find(c => c.id === id);
+        setCarroSelecionado(carro || null);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!form.miniatura_id) {
+            setMensagem('⚠️ Selecione uma miniatura da sua garagem primeiro!');
+            return;
+        }
+
         setLoading(true);
         setMensagem('');
 
+        // Lógica de tempo inteligente (calcula a data de fim baseado nos dias escolhidos)
         const agora = new Date();
-        const dataFim = new Date(agora.getTime() + form.duracao_minutos * 60000);
+        const dataFim = new Date(agora.getTime() + (parseInt(form.duracao_dias) * 24 * 60 * 60 * 1000));
 
         const payload = {
-            ...form,
-            vendedor_id: userId,
-            preco_inicial: form.preco_inicial * 100,
+            vendedor_id: sessao.user.id,
+            miniatura_id: form.miniatura_id,
+            preco_inicial: form.preco_inicial * 100, // Converte para centavos
+            descricao_leilao: form.descricao_leilao,
             data_inicio: agora.toISOString(),
-            data_fim: dataFim.toISOString(),
-            fotos: [form.foto_url]
+            data_fim: dataFim.toISOString()
         };
 
         try {
@@ -84,101 +85,162 @@ export default function NovoLeilaoAdmin() {
             });
 
             if (resposta.ok) {
-                setMensagem('✅ Leilão criado e pronto para a pista!');
+                const {leilao} = await resposta.json();
+                setMensagem('✅ Leilão iniciado! Preparando a pista...');
+                setTimeout(() => router.push(`/leilao/${leilao.id}`), 1500);
             } else {
                 setMensagem('❌ Erro ao criar o leilão.');
             }
         } catch (erro) {
-            setMensagem('❌ Erro de conexão com o servidor.');
+            setMensagem('❌ Erro de conexão.');
         }
-
         setLoading(false);
     };
 
-    if (!autorizado) {
-        return <div
-            className="min-h-screen bg-[#121212] flex items-center justify-center text-white font-bold">Verificando
-            credenciais de acesso...</div>;
-    }
+    // Tratamento rápido para a foto de preview
+    const obterFotoPreview = (fotos) => {
+        if (!fotos) return '';
+        const arr = typeof fotos === 'string' ? JSON.parse(fotos) : fotos;
+        return arr[0] || '';
+    };
 
     return (
         <div className="min-h-screen bg-[#121212] text-gray-100 p-8 font-sans">
-            <div className="absolute top-8 left-8">
-                <Link href="/"
-                      className="text-gray-400 hover:text-orange-500 font-bold flex items-center gap-2 transition-colors">
-                    <span>←</span> Voltar para a Vitrine
-                </Link>
-            </div>
-            <div className="max-w-3xl mx-auto mt-10 bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-700">
-                <h1 className="text-3xl font-bold text-white mb-6">Criar Novo Leilão</h1>
+            <div className="max-w-4xl mx-auto mt-10">
+                <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
+                    <h1 className="text-3xl font-bold text-white">Lançar Novo Leilão 🏁</h1>
+                    <Link href="/admin/garagem" className="text-gray-400 hover:text-white font-bold transition">
+                        Ver Minha Garagem
+                    </Link>
+                </div>
 
                 {mensagem && (
-                    <div className="mb-6 p-4 rounded-lg bg-gray-700 font-bold text-center border border-gray-600">
+                    <div className="mb-6 p-4 rounded-lg bg-gray-800 font-bold text-center border border-gray-700">
                         {mensagem}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Seção 1: Dados do Carro */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm text-gray-400 mb-1">Título da Miniatura</label>
-                            <input type="text" name="titulo" required onChange={handleChange} value={form.titulo}
-                                   className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-orange-500 outline-none"
-                                   placeholder="Ex: Datsun 510 Bluebird"/>
-                        </div>
-                        <div>
-                            <label className="block text-sm text-gray-400 mb-1">Série / Coleção</label>
-                            <select name="serie" onChange={handleChange} value={form.serie}
-                                    className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white outline-none">
-                                <option>Mainline</option>
-                                <option>Premium / Car Culture</option>
-                                <option>Red Line Club (RLC)</option>
-                            </select>
+                <div className="flex flex-col md:flex-row gap-8">
+
+                    {/* COLUNA ESQUERDA: Formulário */}
+                    <div className="flex-1 bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-xl">
+                        <form onSubmit={handleSubmit} className="space-y-6">
+
+                            {/* 1. Escolha a Miniatura */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">1.
+                                    Escolha o Carro da Garagem</label>
+                                <select
+                                    value={form.miniatura_id}
+                                    onChange={handleSelecaoCarro}
+                                    required
+                                    className="w-full bg-gray-900 border border-gray-700 p-4 rounded-xl text-white outline-none focus:border-orange-500 text-lg font-semibold"
+                                >
+                                    <option value="" disabled>Selecione uma miniatura...</option>
+                                    {estoque.map(carro => (
+                                        <option key={carro.id} value={carro.id}>
+                                            {carro.titulo} ({carro.serie})
+                                        </option>
+                                    ))}
+                                </select>
+                                {estoque.length === 0 && (
+                                    <p className="text-red-400 text-xs mt-2 font-bold">Você não tem carros na garagem.
+                                        Cadastre primeiro!</p>
+                                )}
+                            </div>
+
+                            {/* 2. Regras Financeiras */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label
+                                        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Preço
+                                        Inicial (R$)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        placeholder="Ex: 50"
+                                        required
+                                        value={form.preco_inicial}
+                                        onChange={e => setForm({...form, preco_inicial: e.target.value})}
+                                        className="w-full bg-gray-900 border border-gray-700 p-4 rounded-xl text-white outline-none focus:border-orange-500 text-lg font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Duração
+                                        do Leilão</label>
+                                    <select
+                                        value={form.duracao_dias}
+                                        onChange={e => setForm({...form, duracao_dias: e.target.value})}
+                                        className="w-full bg-gray-900 border border-gray-700 p-4 rounded-xl text-white outline-none focus:border-orange-500 text-lg font-bold"
+                                    >
+                                        <option value="1">24 Horas</option>
+                                        <option value="3">3 Dias</option>
+                                        <option value="5">5 Dias</option>
+                                        <option value="7">1 Semana</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* 3. Descrição do Evento */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Regras
+                                    / Condições de Venda</label>
+                                <textarea
+                                    rows="3"
+                                    placeholder="Ex: Frete grátis via transportadora. Pagamento em até 24h após o fim."
+                                    value={form.descricao_leilao}
+                                    onChange={e => setForm({...form, descricao_leilao: e.target.value})}
+                                    className="w-full bg-gray-900 border border-gray-700 p-4 rounded-xl text-white outline-none focus:border-orange-500 resize-none"
+                                ></textarea>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading || estoque.length === 0}
+                                className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 text-white font-black text-xl py-5 rounded-xl transition-all transform active:scale-95 shadow-[0_0_15px_rgba(234,88,12,0.4)] mt-4"
+                            >
+                                {loading ? 'CRIANDO SALA...' : 'INICIAR LEILÃO AO VIVO'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* COLUNA DIREITA: Preview Visual */}
+                    <div className="w-full md:w-1/3">
+                        <div className="sticky top-8">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Preview da
+                                Vitrine</p>
+
+                            {carroSelecionado ? (
+                                <div
+                                    className="bg-gray-800 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
+                                    <div className="h-48 bg-gray-900 p-4 relative flex items-center justify-center">
+                                        <img src={obterFotoPreview(carroSelecionado.fotos)} alt="Preview"
+                                             className="w-full h-full object-contain"/>
+                                        {carroSelecionado.is_sth && <span
+                                            className="absolute top-3 right-3 bg-pink-600 text-[10px] font-black px-2 py-1 rounded shadow-md">$TH</span>}
+                                    </div>
+                                    <div className="p-5">
+                                        <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">{carroSelecionado.serie}</p>
+                                        <h3 className="font-bold text-lg text-white leading-tight mb-4">{carroSelecionado.titulo}</h3>
+                                        <div className="pt-4 border-t border-gray-700">
+                                            <p className="text-xs text-gray-500 font-bold">Estado: <span
+                                                className="text-gray-300">{carroSelecionado.estado}</span></p>
+                                            <p className="text-xs text-gray-500 font-bold mt-1">Lançamento: <span
+                                                className="text-gray-300">{carroSelecionado.ano_lancamento}</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div
+                                    className="bg-gray-800/50 rounded-2xl border border-gray-700 border-dashed h-64 flex items-center justify-center text-gray-500 font-bold text-sm text-center p-6">
+                                    Selecione um carro na garagem para ver o preview.
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-1">Link da Foto (URL temporária)</label>
-                        <input type="url" name="foto_url" onChange={handleChange} value={form.foto_url}
-                               className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white outline-none"
-                               placeholder="https://imgur.com/foto_do_carrinho.png"/>
-                    </div>
-
-                    <div className="flex gap-6 border-y border-gray-700 py-6">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" name="is_th" onChange={handleChange} checked={form.is_th}
-                                   className="w-5 h-5 accent-orange-500"/>
-                            <span className="text-gray-300 font-bold">Treasure Hunt (TH)</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" name="is_sth" onChange={handleChange} checked={form.is_sth}
-                                   className="w-5 h-5 accent-orange-500"/>
-                            <span className="text-pink-500 font-bold">Super Treasure Hunt ($TH)</span>
-                        </label>
-                    </div>
-
-                    {/* Seção 2: Regras de Negócio */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm text-gray-400 mb-1">Preço Inicial (R$)</label>
-                            <input type="number" name="preco_inicial" min="1" required onChange={handleChange}
-                                   value={form.preco_inicial}
-                                   className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-green-400 font-bold text-xl outline-none"/>
-                        </div>
-                        <div>
-                            <label className="block text-sm text-gray-400 mb-1">Duração (Em minutos)</label>
-                            <input type="number" name="duracao_minutos" min="1" required onChange={handleChange}
-                                   value={form.duracao_minutos}
-                                   className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white text-xl outline-none"/>
-                        </div>
-                    </div>
-
-                    <button type="submit" disabled={loading}
-                            className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 text-white font-bold text-xl py-4 rounded-xl transition-all shadow-[0_0_15px_rgba(234,88,12,0.3)]">
-                        {loading ? 'Salvando...' : 'LANÇAR LEILÃO'}
-                    </button>
-                </form>
+                </div>
             </div>
         </div>
     );

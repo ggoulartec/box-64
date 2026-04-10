@@ -12,61 +12,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🗄️ Estado em Memória (Agora funciona como um Cache ultrarrápido)
 const leiloesAtivosCache = {};
 
-// 📦 ROTA: Criar Novo Leilão
 app.post('/api/leiloes', async (req, res) => {
     const dados = req.body;
 
     try {
-        // 1. Salva a miniatura primeiro
-        const {data: miniatura, error: erroMiniatura} = await supabase
-            .from('miniaturas')
-            .insert([{
-                vendedor_id: dados.vendedor_id,
-                titulo: dados.titulo,
-                descricao: dados.descricao,
-                fotos: dados.fotos,
-                estado: dados.estado,
-                ano_lancamento: dados.ano,
-                serie: dados.serie,
-                is_th: dados.is_th,
-                is_sth: dados.is_sth
-            }])
-            .select().single();
-
-        if (erroMiniatura) throw erroMiniatura;
-
-        // 2. Cria o Leilão amarrado à miniatura
-        const {data: leilao, error: erroLeilao} = await supabase
+        const { data: leilao, error: erroLeilao } = await supabase
             .from('leiloes')
             .insert([{
-                miniatura_id: miniatura.id,
+                miniatura_id: dados.miniatura_id,
                 vendedor_id: dados.vendedor_id,
+                descricao: dados.descricao_leilao,
                 preco_inicial: dados.preco_inicial,
                 lance_atual: dados.preco_inicial,
                 data_inicio: dados.data_inicio,
                 data_fim: dados.data_fim,
-                is_anonimo: dados.is_anonimo,
                 status: 'ativo'
             }])
             .select().single();
 
         if (erroLeilao) throw erroLeilao;
 
-        // 3. Coloca no Cache para o WebSocket rodar liso
         leiloesAtivosCache[leilao.id] = {
             lanceAtual: leilao.lance_atual,
             dataFim: new Date(leilao.data_fim).getTime()
         };
 
-        res.status(201).json({mensagem: 'Leilão salvo no Supabase!', leilao});
+        res.status(201).json({ mensagem: 'Leilão lançado com sucesso!', leilao });
     } catch (error) {
-        console.error("Erro banco:", error);
-        res.status(500).json({erro: 'Falha ao salvar no banco.'});
+        console.error("Erro ao criar leilão:", error);
+        res.status(500).json({ erro: 'Falha ao criar o leilão.' });
     }
 });
+
+app.post('/api/miniaturas', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('miniaturas').insert([req.body]).select().single();
+        if (error) throw error;
+        res.status(201).json(data);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
 
 // 📦 ROTA: Listar Vitrine (Home)
 app.get('/api/leiloes', async (req, res) => {
@@ -181,6 +170,26 @@ app.put('/api/leiloes/:id', async (req, res) => {
     } catch (error) {
         console.error("Erro ao atualizar:", error);
         res.status(500).json({erro: 'Falha ao atualizar miniatura.'});
+    }
+});
+
+app.get('/api/miniaturas/vendedor/:vendedorId', async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('miniaturas').select('*').eq('vendedor_id', req.params.vendedorId).order('criado_em', { ascending: false });
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
+    }
+});
+
+app.delete('/api/miniaturas/:id', async (req, res) => {
+    try {
+        const { error } = await supabase.from('miniaturas').delete().eq('id', req.params.id);
+        if (error) throw error;
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ erro: error.message });
     }
 });
 
