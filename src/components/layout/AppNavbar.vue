@@ -114,16 +114,12 @@ onUnmounted(() => {
               </div>
 
               <div class="p-2">
-                <router-link @click="isProfileDropdownOpen = false" to="/perfil" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                  <i class="pi pi-user-edit"></i> Editar Perfil
-                </router-link>
-                
-                <router-link v-if="userRole === 'buyer'" @click="isProfileDropdownOpen = false" to="/meus-lances" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                  <i class="pi pi-receipt"></i> Meus Lances
+                <router-link v-if="userRole === 'buyer'" @click="isProfileDropdownOpen = false" to="/painel" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white hover:bg-zinc-800 transition-colors font-bold">
+                  <i class="pi pi-th-large text-red-500"></i> Meu Painel
                 </router-link>
 
-                <router-link v-if="userRole === 'buyer'" @click="isProfileDropdownOpen = false" to="/minha-garagem" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                  <i class="pi pi-car"></i> Minha Garagem
+                <router-link @click="isProfileDropdownOpen = false" to="/perfil" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                  <i class="pi pi-user-edit"></i> Editar Perfil
                 </router-link>
 
                 <!-- Opções Baseadas em Cargo -->
@@ -183,11 +179,8 @@ onUnmounted(() => {
               <div class="text-base font-medium leading-none text-white truncate max-w-[200px]">{{ user.email }}</div>
             </div>
           </div>
-          <router-link to="/meus-lances" class="block rounded-md py-2 text-base font-medium text-zinc-300 hover:text-white flex items-center gap-2">
-            <i class="pi pi-receipt"></i> Meus Lances
-          </router-link>
-          <router-link to="/minha-garagem" class="block rounded-md py-2 text-base font-medium text-zinc-300 hover:text-white flex items-center gap-2">
-            <i class="pi pi-car"></i> Minha Garagem
+          <router-link to="/painel" class="block rounded-md py-2 text-base font-medium text-white flex items-center gap-2">
+            <i class="pi pi-th-large text-red-500"></i> Meu Painel
           </router-link>
           <button @click="handleLogout" class="mt-2 block rounded-md py-2 text-base font-medium text-red-500 hover:text-red-400">
             Sair

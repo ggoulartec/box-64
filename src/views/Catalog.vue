@@ -68,11 +68,31 @@ onUnmounted(() => {
 const searchQuery = ref('');
 const selectedBrands = ref([]);
 const selectedScales = ref([]);
-const sortOrder = ref('ending_soon'); // ending_soon, price_asc, price_desc
+const selectedSeries = ref([]);
+const maxPrice = ref(null);
+const sortOrder = ref('ending_soon');
 
-// Filter Options
-const brandOptions = ['Hot Wheels', 'MiniGT', 'Tarmac Works', 'Kaido House', 'Inno64', 'Matchbox', 'PGM'];
-const scaleOptions = ['1:64', '1:43', '1:18'];
+// Opções Dinâmicas (Extraídas dos lotes reais)
+const brandOptions = computed(() => {
+  const brands = lots.value.map(l => l.brand);
+  const unique = [...new Set(brands)].filter(Boolean).sort();
+  return unique.map(brand => ({
+    name: brand,
+    count: lots.value.filter(l => l.brand === brand).length
+  }));
+});
+
+const scaleOptions = computed(() => {
+  const scales = lots.value.map(l => l.scale);
+  const unique = [...new Set(scales)].filter(Boolean).sort();
+  return unique;
+});
+
+const seriesOptions = computed(() => {
+  const series = lots.value.map(l => l.series);
+  const unique = [...new Set(series)].filter(Boolean).sort();
+  return unique;
+});
 
 // Computed Filtered Lots
 const filteredLots = computed(() => {
@@ -98,11 +118,20 @@ const filteredLots = computed(() => {
     result = result.filter(lot => selectedScales.value.includes(lot.scale));
   }
 
+  // Series filter
+  if (selectedSeries.value.length > 0) {
+    result = result.filter(lot => selectedSeries.value.includes(lot.series));
+  }
+
+  // Price filter
+  if (maxPrice.value) {
+    result = result.filter(lot => lot.currentBid <= maxPrice.value);
+  }
+
   // Sorting
   return result.sort((a, b) => {
     if (sortOrder.value === 'price_asc') return a.currentBid - b.currentBid;
     if (sortOrder.value === 'price_desc') return b.currentBid - a.currentBid;
-    // default: ending_soon
     return new Date(a.endTime) - new Date(b.endTime);
   });
 });
@@ -126,6 +155,15 @@ const toggleScale = (scale) => {
     selectedScales.value.push(scale);
   } else {
     selectedScales.value.splice(index, 1);
+  }
+};
+
+const toggleSeries = (series) => {
+  const index = selectedSeries.value.indexOf(series);
+  if (index === -1) {
+    selectedSeries.value.push(series);
+  } else {
+    selectedSeries.value.splice(index, 1);
   }
 };
 </script>
@@ -156,13 +194,40 @@ const toggleScale = (scale) => {
         <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
           <i class="pi pi-tag text-zinc-500"></i> Marca
         </h3>
-        <div class="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
-          <label v-for="brand in brandOptions" :key="brand" class="flex items-center gap-3 cursor-pointer group">
-            <div class="w-5 h-5 rounded border flex items-center justify-center transition-colors"
-                 :class="selectedBrands.includes(brand) ? 'bg-red-600 border-red-600' : 'bg-zinc-950 border-zinc-700 group-hover:border-zinc-500'">
-              <i class="pi pi-check text-white text-xs" v-show="selectedBrands.includes(brand)"></i>
+        <div class="space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+          <label 
+            v-for="brand in brandOptions" :key="brand.name" 
+            class="flex items-center justify-between cursor-pointer group"
+            @click.prevent="toggleBrand(brand.name)"
+          >
+            <div class="flex items-center gap-3">
+              <div class="w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                   :class="selectedBrands.includes(brand.name) ? 'bg-red-600 border-red-600' : 'bg-zinc-950 border-zinc-700 group-hover:border-zinc-500'">
+                <i class="pi pi-check text-white text-[10px]" v-show="selectedBrands.includes(brand.name)"></i>
+              </div>
+              <span class="text-zinc-300 text-sm group-hover:text-white transition-colors">{{ brand.name }}</span>
             </div>
-            <span class="text-zinc-300 text-sm group-hover:text-white transition-colors">{{ brand }}</span>
+            <span class="text-[10px] text-zinc-600 font-bold bg-zinc-950 px-2 py-0.5 rounded-full">{{ brand.count }}</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Filtro de Série -->
+      <div v-if="seriesOptions.length > 0" class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+          <i class="pi pi-star text-zinc-500"></i> Série
+        </h3>
+        <div class="space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+          <label 
+            v-for="series in seriesOptions" :key="series" 
+            class="flex items-center gap-3 cursor-pointer group"
+            @click.prevent="toggleSeries(series)"
+          >
+            <div class="w-5 h-5 rounded border flex items-center justify-center transition-colors"
+                 :class="selectedSeries.includes(series) ? 'bg-red-600 border-red-600' : 'bg-zinc-950 border-zinc-700 group-hover:border-zinc-500'">
+              <i class="pi pi-check text-white text-[10px]" v-show="selectedSeries.includes(series)"></i>
+            </div>
+            <span class="text-zinc-300 text-sm group-hover:text-white transition-colors">{{ series }}</span>
           </label>
         </div>
       </div>
@@ -177,19 +242,40 @@ const toggleScale = (scale) => {
             v-for="scale in scaleOptions" 
             :key="scale"
             @click="toggleScale(scale)"
-            class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
-            :class="selectedScales.includes(scale) ? 'bg-red-600/20 border-red-500 text-red-500' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'"
+            class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-all"
+            :class="selectedScales.includes(scale) ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'"
           >
             {{ scale }}
           </button>
         </div>
       </div>
+
+      <!-- Filtro de Preço Máximo -->
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+          <i class="pi pi-money-bill text-zinc-500"></i> Preço Máximo
+        </h3>
+        <div class="space-y-4">
+          <input 
+            type="range" 
+            v-model.number="maxPrice" 
+            min="0" 
+            max="10000" 
+            step="100"
+            class="w-full accent-red-600 bg-zinc-950 rounded-lg cursor-pointer"
+          />
+          <div class="flex justify-between items-center bg-zinc-950 p-3 rounded-lg border border-zinc-800">
+            <span class="text-[10px] text-zinc-500 font-bold uppercase">Até</span>
+            <span class="text-sm text-white font-black italic">{{ maxPrice ? 'R$ ' + maxPrice.toLocaleString() : 'Sem limite' }}</span>
+          </div>
+        </div>
+      </div>
       
       <!-- Botão Limpar Filtros -->
       <button 
-        v-if="searchQuery || selectedBrands.length > 0 || selectedScales.length > 0"
-        @click="searchQuery = ''; selectedBrands = []; selectedScales = []"
-        class="w-full py-2 px-4 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+        v-if="searchQuery || selectedBrands.length > 0 || selectedScales.length > 0 || selectedSeries.length > 0 || maxPrice"
+        @click="searchQuery = ''; selectedBrands = []; selectedScales = []; selectedSeries = []; maxPrice = null"
+        class="w-full py-4 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-zinc-500 hover:text-white hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all active:scale-95"
       >
         Limpar Filtros
       </button>

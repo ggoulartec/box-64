@@ -19,6 +19,7 @@ const routes = [
   { path: '/lote/:id', component: () => import('../views/LotDetails.vue') },
 
   // User Routes
+  { path: '/painel', name: 'Painel do Cliente', component: () => import('../views/profile/Dashboard.vue'), meta: { requiresAuth: true } },
   { path: '/perfil', name: 'Perfil', component: () => import('../views/user/ProfileSettings.vue'), meta: { requiresAuth: true } },
   { path: '/meus-lances', name: 'Meus Lances', component: () => import('../views/user/MyBids.vue'), meta: { requiresAuth: true } },
   { path: '/minha-garagem', name: 'Minha Garagem', component: () => import('../views/user/MyGarage.vue'), meta: { requiresAuth: true } },
